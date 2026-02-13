@@ -1,7 +1,10 @@
-# ============================================================
-# Stage 1: Build the picoclaw binary
-# ============================================================
+## ============================================================
+## Stage 1: Build the picoclaw binary
+## ============================================================
 FROM golang:1.25-alpine AS builder
+
+# Use a Go module proxy to improve reliability in restricted networks
+ENV GOPROXY=https://goproxy.cn,direct
 
 RUN apk add --no-cache git make
 
