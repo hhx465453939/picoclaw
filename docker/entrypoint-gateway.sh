@@ -8,5 +8,6 @@ fi
 if [ -n "$ROOT_PASSWORD" ]; then
   echo "root:$ROOT_PASSWORD" | chpasswd
 fi
-/usr/sbin/sshd
+# 后台启动 sshd，失败也不退出容器，保证 gateway 仍能运行
+/usr/sbin/sshd || true
 exec picoclaw "$@"

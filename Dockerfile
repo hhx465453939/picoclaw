@@ -40,9 +40,6 @@ RUN mkdir -p /root/.picoclaw/workspace/skills && \
 RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh && \
     echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
 
-# Gateway 入口：先启动 sshd，再 exec picoclaw（agent 服务在 compose 中覆盖 entrypoint）
-COPY docker/entrypoint-gateway.sh /entrypoint-gateway.sh
-RUN chmod +x /entrypoint-gateway.sh
-
-ENTRYPOINT ["/entrypoint-gateway.sh"]
+# Gateway 入口：直接用 /bin/sh -c 内联逻辑，不依赖脚本文件。运行时 argv 为 [sh, gateway]，故 $@=gateway，不要 shift
+ENTRYPOINT ["/bin/sh", "-c", "set -e; mkdir -p /var/run/sshd; [ -f /etc/ssh/ssh_host_rsa_key ] || ssh-keygen -A; [ -z \"$ROOT_PASSWORD\" ] || echo \"root:$ROOT_PASSWORD\" | chpasswd; /usr/sbin/sshd || true; exec picoclaw \"$@\"", "sh"]
 CMD ["gateway"]

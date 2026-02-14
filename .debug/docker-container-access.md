@@ -53,9 +53,9 @@ docker volume inspect picoclaw-workspace
 其中 `Mountpoint` 为卷在 NAS 上的路径（通常需 root 或 docker 组权限才能直接读写）。
 
 ## 从本机 SSH 登录到容器（已启用）
-- 镜像已安装 **openssh-server**，Gateway 启动时由 `docker/entrypoint-gateway.sh` 先启动 sshd 再运行 picoclaw。
-- 宿主机端口 **2222** 映射容器 22。从本机登录：`ssh -p 2222 root@<NAS_IP>`。
-- 认证：设置环境变量 `GATEWAY_SSH_ROOT_PASSWORD`（或在 `.env` 中）可密码登录；或挂载/写入 `authorized_keys` 公钥登录。详见 docs/DEPLOYMENT-NAS-FEISHU.md §6.5。
+- 镜像已安装 **openssh-server**，Gateway 启动时由 Dockerfile 内联 ENTRYPOINT（`/bin/sh -c "..."`）先启动 sshd 再 exec picoclaw gateway。
+- 宿主机端口 **2222** 映射容器 22。本机容器：`ssh -p 2222 root@127.0.0.1`；NAS 容器：`ssh -p 2222 root@<NAS_IP>`。
+- 认证：`.env` 中 `GATEWAY_SSH_ROOT_PASSWORD` 仅在容器启动时生效，修改后需 `docker compose up -d --force-recreate`；force-recreate 后若报 REMOTE HOST IDENTIFICATION HAS CHANGED，需 `ssh-keygen -f ~/.ssh/known_hosts -R '[127.0.0.1]:2222'`（或对应 IP）再连。完整流程见 docs/DEPLOYMENT-NAS-FEISHU.md §6.5。
 
 ## 注意事项
 - 容器内已预装 **openssh-client**（`ssh`/`scp`/`sftp`），可在 `docker exec` 或 SSH 进容器后使用。
@@ -66,3 +66,10 @@ docker volume inspect picoclaw-workspace
 - 2026-02-14 用户问如何访问项目 Docker 容器内文件；整理 exec / cp / volume 三种方式并写入本记录与 DEPLOYMENT-NAS-FEISHU.md §6.4。
 - 2026-02-14 在 Dockerfile 运行时阶段加入 openssh-client，便于在容器内使用 ssh/scp/sftp 管理远程文件与运行配置；.debug 与部署文档同步说明。
 - 2026-02-14 实现从本机 SSH 登录到容器：Dockerfile 增加 openssh-server、entrypoint-gateway.sh、sshd 配置；docker-compose 暴露 2222:22、ROOT_PASSWORD/env；新增 DEPLOYMENT-NAS-FEISHU §6.5 与 .env.example 说明。
+- 2026-02-14 修复 Gateway 容器反复重启：入口脚本中 sshd 改为 `sshd || true` 避免 sshd 失败导致容器退出；Dockerfile 中 COPY 后 `sed -i 's/\r$//'` 剥离 CRLF，避免 Windows/Samba 换行符导致脚本执行失败；部署文档 §6.5 增加“容器反复重启”排查步骤（docker compose logs）。
+- 2026-02-14 修复 exec /entrypoint-gateway.sh: no such file or directory：根因为 COPY 自 Samba/Windows 的脚本带 CRLF，shebang 被读成 `#!/bin/sh\r`，内核找不到解释器。改为在 Dockerfile 内用 RUN cat << 'EOF' 直接生成入口脚本，不再 COPY 宿主机文件，镜像内恒为 LF。
+- 2026-02-14 若 heredoc 构建后仍报同一错误（可能为 Docker 版本/构建环境对 heredoc 处理不一致）：改为不依赖任何脚本文件，使用 ENTRYPOINT ["/bin/sh", "-c", "内联逻辑", "sh"] + CMD ["gateway"]，入口逻辑直接写在 exec 形式中，彻底避免脚本文件与 shebang。
+- 2026-02-14 修复 gateway 只打印 Usage 后退出：sh -c "script" sh gateway 中 $1=gateway，误用 shift 导致 $@ 被清空；去掉 shift，保留 exec picoclaw "$@" 以正确传入 gateway。
+- 2026-02-14 SSH 密码登录 Permission denied：说明 GATEWAY_SSH_ROOT_PASSWORD 仅在容器启动时由 entrypoint 执行 chpasswd；修改 .env 后需 `docker compose up -d --force-recreate` 才生效。部署文档 §6.5 补充“修改密码后须重建容器”及“密码正确仍 Permission denied”排查（force-recreate、或 exec chpasswd 验证）。
+- 2026-02-14 SSH “REMOTE HOST IDENTIFICATION HAS CHANGED”：force-recreate 后容器重新生成 SSH host key，需 `ssh-keygen -f ~/.ssh/known_hosts -R '[127.0.0.1]:2222'` 删除旧条目再连。部署文档 §6.5 补充该排查。
+- 2026-02-14 文档与操作流程对齐：在 §6.5 增加「正确操作流程（推荐顺序）」五步（设密码→build/up 或 force-recreate→按需删 known_hosts→ssh 连接→登录后路径）；步骤二区分「Gateway 在 NAS」与「Gateway 在本机」；.debug 中 SSH 入口改为“Dockerfile 内联 ENTRYPOINT”，并写明密码/known_hosts 注意点。

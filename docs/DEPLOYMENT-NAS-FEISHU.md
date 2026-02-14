@@ -400,13 +400,24 @@ docker cp picoclaw-gateway:/root/.picoclaw/workspace/projects ./projects-backup
 
 Gateway 容器内已运行 **sshd**，宿主机映射端口 **2222 → 22**。可从本机（或 NAS 本机）直接 SSH 进容器，便于管理工作区文件与运行配置。
 
+**正确操作流程（推荐按此顺序）**
+
+1. **设置密码**：在项目目录的 `.env` 中写 `GATEWAY_SSH_ROOT_PASSWORD=你的密码`（无空格、无引号）。
+2. **启动或重建容器**：
+   - 首次：`docker compose --profile gateway build` 后执行 `docker compose --profile gateway up -d`。
+   - 修改过 `.env` 中的密码后：`docker compose --profile gateway up -d --force-recreate`（否则新密码不生效）。
+3. **处理主机密钥（仅当曾连过且做过 force-recreate 时）**：若 SSH 报 “REMOTE HOST IDENTIFICATION HAS CHANGED”，先执行  
+   `ssh-keygen -f ~/.ssh/known_hosts -R '[127.0.0.1]:2222'`（本机容器）或把 `127.0.0.1` 换成 NAS IP（远程容器）。
+4. **连接**：`ssh -p 2222 root@127.0.0.1`（Gateway 在本机时）或 `ssh -p 2222 root@<NAS_IP>`（Gateway 在 NAS 时）；首次提示信任主机密钥输入 `yes`，再输入 `.env` 中的密码。
+5. **登录后**：工作区为 `/root/.picoclaw/workspace`，项目压缩包在 `/root/.picoclaw/workspace/projects/`。
+
 **步骤一：设置登录方式（二选一或同时用）**
 
 - **密码登录**：在项目目录下创建或编辑 `.env`，设置：
   ```bash
   GATEWAY_SSH_ROOT_PASSWORD=你设置的密码
   ```
-  然后重启：`docker compose --profile gateway up -d`（compose 会读 `.env` 传入容器）。
+  **重要**：密码只在容器**启动时**由入口脚本写入（chpasswd）。修改 `.env` 后必须**重建容器**才能生效：`docker compose --profile gateway up -d --force-recreate`。若只 `up -d` 且容器已存在，不会重新读 `.env` 设密码。
 - **公钥登录（推荐）**：把本机公钥写入容器内 root 的 `authorized_keys`。
   - 一次性写入（在 NAS 上执行）：先 `ssh home_nas`，再在项目目录执行  
     `docker compose exec picoclaw-gateway sh -c 'mkdir -p /root/.ssh && cat >> /root/.ssh/authorized_keys'`  
@@ -417,17 +428,17 @@ Gateway 容器内已运行 **sshd**，宿主机映射端口 **2222 → 22**。�
 
 **步骤二：从本机 SSH 登录**
 
-- 若从 **Windows 本机** 登录到 NAS 上的容器（NAS IP 为 `192.168.3.23` 时）：
-  ```bash
-  ssh -p 2222 root@192.168.3.23
-  ```
-  提示输入密码时输入步骤一设置的 `GATEWAY_SSH_ROOT_PASSWORD`；若已配置公钥则可免密。
-- 若已在 **NAS 上**（例如已 `ssh home_nas`），则：
-  ```bash
-  ssh -p 2222 root@127.0.0.1
-  ```
+- Gateway 在 **NAS** 上（如 NAS IP `192.168.3.23`）：在任意能访问 NAS 的机器上执行 `ssh -p 2222 root@192.168.3.23`，输入 `.env` 中的密码（或使用已配置的公钥）。
+- Gateway 在 **本机**（与 `docker compose` 同机）：在该机执行 `ssh -p 2222 root@127.0.0.1`，输入 `.env` 中的密码（或公钥）。  
+  若曾用 `--force-recreate` 重建过容器，需先执行 `ssh-keygen -f ~/.ssh/known_hosts -R '[127.0.0.1]:2222'` 再连，首次提示输入 `yes` 接受新主机密钥。
 
 登录后容器内路径与 6.4 一致，工作区为 `/root/.picoclaw/workspace`，项目压缩包在 `/root/.picoclaw/workspace/projects/`。
+
+**若密码正确仍 Permission denied**：多为修改 `.env` 后未重建容器，root 密码未更新。在项目目录执行 `docker compose --profile gateway up -d --force-recreate`，再试 SSH。若仍失败，可先手动设密码验证：`docker compose exec picoclaw-gateway sh -c 'echo "root:你的密码" | chpasswd'`，再 `ssh -p 2222 root@127.0.0.1`。
+
+**若出现 “REMOTE HOST IDENTIFICATION HAS CHANGED”**：多为 `--force-recreate` 后容器重新生成了一组 SSH 主机密钥，本机 `~/.ssh/known_hosts` 里仍是旧密钥。删除旧条目后重连即可：`ssh-keygen -f ~/.ssh/known_hosts -R '[127.0.0.1]:2222'`（若 SSH 到 NAS 上的容器则把 `127.0.0.1` 换成 NAS IP），再执行 `ssh -p 2222 root@127.0.0.1`，提示时输入 `yes` 接受新密钥。
+
+**若容器反复重启（出现 “Container is restarting” 无法 exec）**：先查看退出原因：`docker compose logs --tail=100 picoclaw-gateway`。若日志为 `exec /entrypoint-gateway.sh: no such file or directory`，多为入口脚本受 CRLF 或构建环境影响；当前 Dockerfile 已改为不依赖脚本文件，使用 `ENTRYPOINT ["/bin/sh", "-c", "内联逻辑", "sh"]` 直接执行启动 sshd + gateway，重建镜像即可。其他报错按日志内容排查。
 
 ---
 
