@@ -365,6 +365,70 @@ docker compose --profile gateway up -d
 docker compose --profile gateway restart picoclaw-gateway
 ```
 
+### 6.4 访问容器内文件（工作区、打包产物等）
+
+Agent 生成的项目压缩包等位于容器内 `/root/.picoclaw/workspace/projects/`，该目录由 Docker 命名卷 `picoclaw-workspace` 持久化。可用以下方式访问：
+
+**方式一：在容器内执行命令（推荐先查看内容）**
+
+```bash
+ssh home_nas
+cd /home/damncheater/Development/picoclaw
+
+# 列出工作区项目文件
+docker compose exec picoclaw-gateway ls -la /root/.picoclaw/workspace/projects/
+
+# 进入容器 shell 后自行 ls/cat/cp 等
+docker compose exec picoclaw-gateway sh
+```
+
+**方式二：把文件从容器复制到 NAS 当前目录**
+
+```bash
+# 复制单个压缩包到当前目录
+docker cp picoclaw-gateway:/root/.picoclaw/workspace/projects/claw_family_health.tar.gz ./
+
+# 复制整个 projects 目录
+docker cp picoclaw-gateway:/root/.picoclaw/workspace/projects ./projects-backup
+```
+
+复制到 NAS 后，可通过 SCP、Samba 或云盘等方式传到本机。如需查看卷在宿主机上的实际路径，可执行：`docker volume inspect picoclaw-workspace`（其中 `Mountpoint` 即宿主机路径，通常需相应权限才能直接访问）。
+
+镜像内已预装 **openssh-client**（`ssh`/`scp`/`sftp`）。进入容器后（`docker compose exec picoclaw-gateway sh`）可直接使用这些命令连接其他主机、拉取或推送文件。
+
+### 6.5 从本机 SSH 登录到 Gateway 容器
+
+Gateway 容器内已运行 **sshd**，宿主机映射端口 **2222 → 22**。可从本机（或 NAS 本机）直接 SSH 进容器，便于管理工作区文件与运行配置。
+
+**步骤一：设置登录方式（二选一或同时用）**
+
+- **密码登录**：在项目目录下创建或编辑 `.env`，设置：
+  ```bash
+  GATEWAY_SSH_ROOT_PASSWORD=你设置的密码
+  ```
+  然后重启：`docker compose --profile gateway up -d`（compose 会读 `.env` 传入容器）。
+- **公钥登录（推荐）**：把本机公钥写入容器内 root 的 `authorized_keys`。
+  - 一次性写入（在 NAS 上执行）：先 `ssh home_nas`，再在项目目录执行  
+    `docker compose exec picoclaw-gateway sh -c 'mkdir -p /root/.ssh && cat >> /root/.ssh/authorized_keys'`  
+    然后粘贴本机公钥内容（如 `cat ~/.ssh/id_rsa.pub` 输出），回车后 Ctrl+D 结束输入。
+  - 或长期挂载：在 `docker-compose.yml` 的 `picoclaw-gateway` 的 `volumes` 中取消注释  
+    `- ./config/ssh/authorized_keys:/root/.ssh/authorized_keys:ro`，  
+    在 NAS 项目下创建 `config/ssh/authorized_keys` 并写入本机公钥，重启容器。
+
+**步骤二：从本机 SSH 登录**
+
+- 若从 **Windows 本机** 登录到 NAS 上的容器（NAS IP 为 `192.168.3.23` 时）：
+  ```bash
+  ssh -p 2222 root@192.168.3.23
+  ```
+  提示输入密码时输入步骤一设置的 `GATEWAY_SSH_ROOT_PASSWORD`；若已配置公钥则可免密。
+- 若已在 **NAS 上**（例如已 `ssh home_nas`），则：
+  ```bash
+  ssh -p 2222 root@127.0.0.1
+  ```
+
+登录后容器内路径与 6.4 一致，工作区为 `/root/.picoclaw/workspace`，项目压缩包在 `/root/.picoclaw/workspace/projects/`。
+
 ---
 
 ## 7. 快速检查清单

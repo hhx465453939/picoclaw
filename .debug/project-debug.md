@@ -26,6 +26,7 @@
 - 2026-02-13 记录项目运行环境与测试规则：通过 ssh home_nas 登录 NAS，在远程 Ubuntu 环境下进入 /home/damncheater/Development/picoclaw 执行所有调试与 Checkfix 命令。
 - 2026-02-13 修复 Docker 构建 Go 模块网络问题：在 Dockerfile 的 builder 阶段设置 GOPROXY=https://goproxy.cn,direct，重新执行 `ssh home_nas "cd /home/damncheater/Development/picoclaw && docker compose --profile gateway build"`，构建成功。
 - 2026-02-13 部署与启动 Gateway：在 NAS 上执行 `ssh home_nas "cd /home/damncheater/Development/picoclaw && docker compose --profile gateway up -d"`，容器 picoclaw-gateway 成功启动并运行（日志显示 Agent 初始化完成、Cron/Heartbeat 服务正常，当前无启用的外部聊天渠道）。
+- 2026-02-14 容器内文件访问：新增 .debug/docker-container-access.md，并在 docs/DEPLOYMENT-NAS-FEISHU.md §6.4 补充「访问容器内文件」运维说明（docker exec / docker cp / volume inspect）。
 
 ## 待追踪问题
 - 根据后续具体模块调试记录补充。
