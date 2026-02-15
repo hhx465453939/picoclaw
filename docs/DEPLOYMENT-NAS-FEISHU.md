@@ -365,7 +365,17 @@ docker compose --profile gateway up -d
 docker compose --profile gateway restart picoclaw-gateway
 ```
 
-### 6.4 访问容器内文件（工作区、打包产物等）
+### 6.4 容器时区（北京时间）
+
+镜像与 Compose 中已设置 **TZ=Asia/Shanghai**，容器内时间与 **北京时间** 一致，影响：
+
+- Agent 系统提示中的 **Current Time**
+- Cron 定时任务的执行时间
+- Heartbeat 等时间戳
+
+如需改为其他时区，在 `docker-compose.yml` 的 `picoclaw-gateway` 的 `environment` 中修改或新增 `TZ`，例如：`TZ=America/New_York`。修改后执行 `docker compose --profile gateway up -d --force-recreate` 使环境变量生效。
+
+### 6.5 访问容器内文件（工作区、打包产物等）
 
 Agent 生成的项目压缩包等位于容器内 `/root/.picoclaw/workspace/projects/`，该目录由 Docker 命名卷 `picoclaw-workspace` 持久化。可用以下方式访问：
 
@@ -396,7 +406,7 @@ docker cp picoclaw-gateway:/root/.picoclaw/workspace/projects ./projects-backup
 
 镜像内已预装 **openssh-client**（`ssh`/`scp`/`sftp`）。进入容器后（`docker compose exec picoclaw-gateway sh`）可直接使用这些命令连接其他主机、拉取或推送文件。
 
-### 6.5 从本机 SSH 登录到 Gateway 容器
+### 6.6 从本机 SSH 登录到 Gateway 容器
 
 Gateway 容器内已运行 **sshd**，宿主机映射端口 **2222 → 22**。可从本机（或 NAS 本机）直接 SSH 进容器，便于管理工作区文件与运行配置。
 

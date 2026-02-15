@@ -10,6 +10,8 @@ services:
     container_name: picoclaw-agent
     profiles:
       - agent
+    environment:
+      - TZ=Asia/Shanghai
     volumes:
       - ./config/config.json:/root/.picoclaw/config.json:ro
       - picoclaw-workspace:/root/.picoclaw/workspace
@@ -33,6 +35,8 @@ services:
       # 宿主机 2222 -> 容器 22，从本机 SSH 登录容器：ssh -p 2222 root@<NAS_IP>
       - "2222:22"
     environment:
+      # 时区：使用北京时间（与 Agent 显示的 Current Time、Cron/Heartbeat 时间一致）
+      - TZ=Asia/Shanghai
       # 可选：设置后可用密码登录容器。不设则需挂载 /root/.ssh/authorized_keys（见文档）
       - ROOT_PASSWORD=${GATEWAY_SSH_ROOT_PASSWORD:-}
     volumes:

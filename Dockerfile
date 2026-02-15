@@ -26,6 +26,9 @@ FROM alpine:3.21
 # 基础与 SSH：client 用于容器内连出；server 用于从本机 SSH 登录到容器
 RUN apk add --no-cache ca-certificates tzdata openssh-client openssh-server
 
+# 默认使用北京时间（Agent 的 Current Time、Cron、Heartbeat 等均依赖此时区）
+ENV TZ=Asia/Shanghai
+
 # Copy binary
 COPY --from=builder /src/build/picoclaw /usr/local/bin/picoclaw
 
